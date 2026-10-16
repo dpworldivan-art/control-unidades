@@ -1,5 +1,5 @@
 // Service worker: deja la app lista para abrir sin señal.
-const CACHE = 'ctrl-unidades-v4';
+const CACHE = 'ctrl-unidades-v5';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -12,6 +12,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.pathname.indexOf('supervisor') >= 0) return;  // la vista de supervisión siempre en vivo
   if (url.origin !== location.origin) return;           // Apps Script y demás: directo a la red
   e.respondWith(
     caches.match(req, { ignoreSearch: true }).then(hit => {

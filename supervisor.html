@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3a6d0f">
+<meta name="robots" content="noindex">
+<title>Supervisión de unidades</title>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="supervisor.css">
+</head>
+<body>
+<div class="wrap sv">
+
+<section id="s-login" hidden>
+  <h1>Supervisión de unidades</h1>
+  <div class="card">
+    <div class="field"><label for="clave">Clave de supervisores</label><input id="clave" type="password" autocomplete="current-password" placeholder="Clave"></div>
+    <button class="btn primary" id="entrar">Entrar</button>
+    <p class="note" id="login-msg"></p>
+  </div>
+</section>
+
+<section id="s-app" hidden>
+  <div class="top">
+    <div class="who"><b>Supervisión</b><span id="gen">Cargando…</span></div>
+    <div class="top-r"><button class="btn sm" id="recargar">Actualizar</button><button class="btn sm" id="salir">Salir</button></div>
+  </div>
+
+  <div class="card filtros">
+    <div class="field"><label for="f-desde">Desde</label><input type="date" id="f-desde"></div>
+    <div class="field"><label for="f-hasta">Hasta</label><input type="date" id="f-hasta"></div>
+    <div class="field"><label for="f-turno">Turno</label><select id="f-turno"><option value="">Todos</option><option value="DIA">Día</option><option value="NOCHE">Noche</option></select></div>
+    <div class="field"><label for="f-trq">Tranquera</label><select id="f-trq"><option value="">Todas</option></select></div>
+    <div class="field"><label for="f-ctrl">Controlador</label><select id="f-ctrl"><option value="">Todos</option></select></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="tabs seg" role="group" aria-label="Sección">
+    <button type="button" id="t-res" aria-pressed="true">Resumen</button>
+    <button type="button" id="t-rev" aria-pressed="false">Por revisar <span class="pill" id="n-rev">0</span></button>
+    <button type="button" id="t-tur" aria-pressed="false">Turnos</button>
+  </div>
+
+  <div id="p-res">
+    <div class="card"><h2>Buses por día y turno</h2><div class="tscroll"><table id="tb-dia"></table></div></div>
+    <div class="card"><h2>Por controlador</h2><div class="tscroll"><table id="tb-ctrl"></table></div></div>
+    <div class="card"><h2>Por tranquera</h2><div class="tscroll"><table id="tb-trq"></table></div></div>
+  </div>
+
+  <div id="p-rev" hidden>
+    <p class="note" id="rev-note"></p>
+    <div id="rev-list"></div>
+  </div>
+
+  <div id="p-tur" hidden>
+    <div class="card"><div class="tscroll"><table id="tb-tur"></table></div></div>
+  </div>
+</section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="config.js"></script>
+<script src="supervisor.js"></script>
+</body>
+</html>
