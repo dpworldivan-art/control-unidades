@@ -24,7 +24,9 @@
   <div class="card">
     <div class="field"><label for="s-ctrl">Controlador</label><select id="s-ctrl"></select></div>
     <div class="field"><label for="s-trq">Tranquera</label><select id="s-trq"></select></div>
-    <button class="btn primary" id="go" disabled>Comenzar registro</button>
+    <div class="field"><span class="lbl">Turno</span>
+      <div class="seg" id="s-turno"><button type="button" data-v="DIA" aria-pressed="true">Día</button><button type="button" data-v="NOCHE" aria-pressed="false">Noche</button></div></div>
+    <button class="btn primary" id="go" disabled>Iniciar turno</button>
     <p class="note" id="cfg-note"></p>
   </div>
 </section>
@@ -32,24 +34,20 @@
 <section id="v-main" hidden>
   <div class="top">
     <div class="who"><b id="w-name"></b><span id="w-trq"></span></div>
-    <div class="top-r">
-      <div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div>
-      <button class="btn sm" id="chg">Cambiar</button>
-    </div>
+    <div class="top-r"><div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div></div>
+  </div>
+  <div class="tabs seg" role="group" aria-label="Pantalla">
+    <button type="button" id="tab-reg" aria-pressed="true">Registrar</button>
+    <button type="button" id="tab-turno" aria-pressed="false">Mi turno</button>
   </div>
 
-  <div class="stats" aria-live="polite">
-    <div class="stat"><b id="k-bus">0</b><span>buses en este turno</span></div>
-    <div class="stat"><b id="k-pax">0</b><span>pasajeros</span></div>
-    <div class="stat"><b id="k-avg">–</b><span>promedio por bus</span></div>
-  </div>
+<div id="p-reg">
+  <div class="count"><b id="k-bus">0</b><span>buses registrados en este turno</span></div>
 
   <div class="card">
     <div class="ctl">
       <div class="field"><span class="lbl">Movimiento</span>
         <div class="seg" id="seg-mov"><button type="button" data-v="Entrada" aria-pressed="true">Entrada</button><button type="button" data-v="Salida" aria-pressed="false">Salida</button></div></div>
-      <div class="field"><span class="lbl">Turno</span>
-        <div class="seg" id="seg-turno"><button type="button" data-v="DIA" aria-pressed="true">Día</button><button type="button" data-v="NOCHE" aria-pressed="false">Noche</button></div></div>
     </div>
 
     <div class="field">
@@ -86,22 +84,48 @@
 
     <div class="warns" id="warns" aria-live="polite"></div>
 
-    <details id="more" hidden>
-      <summary>Más datos</summary>
-      <div class="more" id="fields-m"></div>
-    </details>
-
     <button class="btn primary" id="reg" disabled>Registrar unidad</button>
     <div class="hint" id="hint"></div>
   </div>
+</div>
+
+<div id="p-turno" hidden>
+  <div class="card">
+    <div class="big"><b id="t-n">0</b><span>buses registrados</span></div>
+    <div class="note" id="t-mov"></div>
+    <dl class="kv">
+      <div><dt>Inicio del turno</dt><dd id="t-ini">–</dd></div>
+      <div><dt>Primer registro</dt><dd id="t-first">–</dd></div>
+      <div><dt>Último registro</dt><dd id="t-last">–</dd></div>
+      <div><dt>Duración</dt><dd id="t-dur">–</dd></div>
+      <div><dt>Ritmo promedio</dt><dd id="t-rate">–</dd></div>
+      <div><dt>Última hora</dt><dd id="t-hour">–</dd></div>
+      <div><dt>Pendientes de subir</dt><dd id="t-pend">–</dd></div>
+      <div><dt>Anulados</dt><dd id="t-anul">0</dd></div>
+    </dl>
+    <button class="btn" id="t-close">Cerrar turno</button>
+    <div class="confirm" id="t-confirm" hidden>
+      <p id="t-confirm-t"></p>
+      <div class="two"><button class="btn" id="t-no">Seguir en turno</button><button class="btn primary" id="t-yes">Sí, cerrar turno</button></div>
+    </div>
+    <div class="closed" id="t-closed" hidden>
+      <p id="t-closed-t"></p>
+      <button class="btn primary" id="t-new">Iniciar nuevo turno</button>
+    </div>
+  </div>
 
   <div class="card">
-    <div class="list-h"><b>Últimos registros</b><span class="note" id="l-sub"></span></div>
+    <div class="list-h"><b>Registros de hoy</b><span class="note" id="l-sub"></span></div>
     <div class="list" id="list"></div>
   </div>
+</div>
 
   <div class="foot"><span id="foot-day"></span><span id="foot-cfg"></span></div>
 </section>
+</div>
+<div class="cam" id="cam" hidden role="dialog" aria-label="Cámara">
+  <video id="cam-v" playsinline muted autoplay></video>
+  <div class="cam-bar"><button type="button" class="btn" id="cam-x">Cancelar</button><button type="button" class="shoot" id="cam-shoot" aria-label="Tomar foto"></button><span></span></div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="config.js"></script>
