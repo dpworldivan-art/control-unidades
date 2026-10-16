@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3a6d0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Unidades">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Control de unidades</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="wrap">
+
+<section id="v-start" hidden>
+  <div>
+    <h1>Control de unidades</h1>
+    <div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div>
+  </div>
+  <div class="card">
+    <div class="field"><label for="s-ctrl">Controlador</label><select id="s-ctrl"></select></div>
+    <div class="field"><label for="s-trq">Tranquera</label><select id="s-trq"></select></div>
+    <button class="btn primary" id="go" disabled>Comenzar registro</button>
+    <p class="note" id="cfg-note"></p>
+  </div>
+</section>
+
+<section id="v-main" hidden>
+  <div class="top">
+    <div class="who"><b id="w-name"></b><span id="w-trq"></span></div>
+    <div class="top-r">
+      <div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div>
+      <button class="btn sm" id="chg">Cambiar</button>
+    </div>
+  </div>
+
+  <div class="stats" aria-live="polite">
+    <div class="stat"><b id="k-bus">0</b><span>buses en este turno</span></div>
+    <div class="stat"><b id="k-pax">0</b><span>pasajeros</span></div>
+    <div class="stat"><b id="k-avg">–</b><span>promedio por bus</span></div>
+  </div>
+
+  <div class="card">
+    <div class="ctl">
+      <div class="field"><span class="lbl">Movimiento</span>
+        <div class="seg" id="seg-mov"><button type="button" data-v="Entrada" aria-pressed="true">Entrada</button><button type="button" data-v="Salida" aria-pressed="false">Salida</button></div></div>
+      <div class="field"><span class="lbl">Turno</span>
+        <div class="seg" id="seg-turno"><button type="button" data-v="DIA" aria-pressed="true">Día</button><button type="button" data-v="NOCHE" aria-pressed="false">Noche</button></div></div>
+    </div>
+
+    <div class="field">
+      <span class="lbl">Foto de la placa</span>
+      <input id="foto" type="file" accept="image/*" capture="environment" hidden>
+      <button type="button" class="photo" id="photo-btn">
+        <span class="photo-empty" id="photo-empty"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Tocar para tomar foto</span></span>
+        <span class="photo-ok" id="photo-ok" hidden><img id="photo-img" alt="Foto de la placa"><span id="photo-meta"></span></span>
+      </button>
+    </div>
+
+    <div class="field">
+      <label for="placa">Placa <small id="plen">0/6</small></label>
+      <input id="placa" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="A1B234">
+      <div class="menu" id="m-placa" hidden></div>
+    </div>
+    <div id="pinfo" class="pinfo" hidden></div>
+
+    <div class="field">
+      <label for="ruta">Ruta</label>
+      <input id="ruta" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Escribe para buscar…">
+      <div class="menu" id="m-ruta" hidden></div>
+      <div class="zone" id="zona"></div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="field">
+      <label for="pasajeros">Pasajeros</label>
+      <input id="pasajeros" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="3" placeholder="0">
+      <div class="occ" id="occ" hidden><div class="bar" id="bar"><i></i></div><small id="occ-t"></small></div>
+    </div>
+
+    <div id="fields-p" class="fields"></div>
+
+    <div class="warns" id="warns" aria-live="polite"></div>
+
+    <details id="more" hidden>
+      <summary>Más datos</summary>
+      <div class="more" id="fields-m"></div>
+    </details>
+
+    <button class="btn primary" id="reg" disabled>Registrar unidad</button>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="card">
+    <div class="list-h"><b>Últimos registros</b><span class="note" id="l-sub"></span></div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <div class="foot"><span id="foot-day"></span><span id="foot-cfg"></span></div>
+</section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
