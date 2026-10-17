@@ -27,6 +27,7 @@
     <div class="field"><span class="lbl">Turno</span>
       <div class="seg" id="s-turno"><button type="button" data-v="DIA" aria-pressed="true">Día</button><button type="button" data-v="NOCHE" aria-pressed="false">Noche</button></div></div>
     <button class="btn primary" id="go" disabled>Iniciar turno</button>
+    <button class="btn" id="go-rev" type="button" hidden>Revisar placas</button>
     <p class="note" id="cfg-note"></p>
   </div>
 </section>
@@ -34,11 +35,16 @@
 <section id="v-main" hidden>
   <div class="top">
     <div class="who"><b id="w-name"></b><span id="w-trq"></span></div>
-    <div class="top-r"><div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div></div>
+    <div class="top-r"><button type="button" class="link" id="t-back" hidden>← Volver</button><div class="status"><span class="dot wait" data-dot></span><span data-stat>Iniciando…</span></div></div>
+  </div>
+  <div class="confirm" id="back-confirm" hidden>
+    <p>¿Cancelar este turno? Como aún no registraste ningún bus, no se guardará nada y volverás al inicio.</p>
+    <div class="two"><button class="btn" id="back-no" type="button">Seguir en turno</button><button class="btn primary" id="back-yes" type="button">Sí, cancelar turno</button></div>
   </div>
   <div class="tabs seg" role="group" aria-label="Pantalla">
     <button type="button" id="tab-reg" aria-pressed="true">Registrar</button>
     <button type="button" id="tab-turno" aria-pressed="false">Mi turno</button>
+    <button type="button" id="tab-rev" aria-pressed="false" hidden>Revisar <b id="rev-n"></b></button>
   </div>
 
 <div id="p-reg">
@@ -59,7 +65,7 @@
       </button>
     </div>
 
-    <div class="field">
+    <div class="field" id="f-placa">
       <label for="placa">Placa <small id="plen">0/6</small></label>
       <input id="placa" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="A1B234">
       <div class="menu" id="m-placa" hidden></div>
@@ -102,6 +108,7 @@
       <div><dt>Última hora</dt><dd id="t-hour">–</dd></div>
       <div><dt>Pendientes de subir</dt><dd id="t-pend">–</dd></div>
       <div><dt>Anulados</dt><dd id="t-anul">0</dd></div>
+      <div id="t-rev-row" hidden><dt>Placas por revisar</dt><dd id="t-rev">0</dd></div>
     </dl>
     <button class="btn" id="t-close">Cerrar turno</button>
     <div class="confirm" id="t-confirm" hidden>
@@ -123,6 +130,15 @@
   <div class="foot"><span id="foot-day"></span><span id="foot-cfg"></span></div>
 </section>
 </div>
+<section id="v-rev" hidden class="wrap-rev">
+  <div class="top">
+    <div class="who"><b>Revisar placas</b><span id="rev-sub"></span></div>
+    <div class="top-r"><button type="button" class="link" id="rev-back">← Volver</button></div>
+  </div>
+  <p class="note" id="rev-help">Compara la foto con la placa. Si está bien, toca «Correcta». Si está mal, corrígela viendo la foto y luego toca «Correcta».</p>
+  <div id="rev-list"></div>
+  <p class="note" id="rev-more" hidden></p>
+</section>
 <div class="cam" id="cam" hidden role="dialog" aria-label="Cámara">
   <video id="cam-v" playsinline muted autoplay></video>
   <div class="cam-bar"><button type="button" class="btn" id="cam-x">Cancelar</button><button type="button" class="shoot" id="cam-shoot" aria-label="Tomar foto"></button><span></span></div>

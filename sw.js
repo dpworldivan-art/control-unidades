@@ -1,5 +1,5 @@
 // Service worker: deja la app lista para abrir sin señal.
-const CACHE = 'ctrl-unidades-v5';
+const CACHE = 'ctrl-unidades-v7';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

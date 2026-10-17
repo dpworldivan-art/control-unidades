@@ -141,3 +141,16 @@ summary{cursor:pointer;font-weight:600;color:var(--mut);min-height:36px;display:
 .confirm p,.closed p{margin:0;font-size:.95rem}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row.gone{opacity:.5}.row.gone .p,.row.gone .n{text-decoration:line-through}
+
+/* revisión de placas */
+#v-rev{padding:0 0 40px}
+.rv{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;margin:10px 0;display:grid;gap:8px}
+.rv img{width:100%;max-height:46vh;object-fit:contain;background:#111;border-radius:10px;display:block}
+.rv .noimg{padding:24px 10px;text-align:center;color:var(--mut);background:var(--field);border-radius:10px}
+.rv input{font-family:var(--mono);font-weight:700;font-size:1.9rem;letter-spacing:.1em;text-align:center;text-transform:uppercase;min-height:60px}
+.rv .meta{display:flex;justify-content:space-between;gap:8px;font-size:.82rem;color:var(--mut)}
+.rv .st{font-size:.85rem;color:var(--mut);text-align:center;min-height:1.2em}
+.rv .st.new{color:#b25b00;font-weight:600}
+.rv .st.ok{color:#2e7d32;font-weight:600}
+#tab-rev b{display:inline-block;min-width:1.4em;padding:0 6px;border-radius:99px;background:#f0a500;color:#1b1b1b;font-size:.8rem}
+#tab-rev b:empty{display:none}

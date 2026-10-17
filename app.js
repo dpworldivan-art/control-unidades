@@ -36,7 +36,8 @@ async function recPut(r) { try { await idb.put('rec', r); } catch (e) {} }
 async function recDel(id) { try { await idb.del('rec', id); } catch (e) {} }
 
 /* ---------- configuración ---------- */
-const DEF = { foto_obligatoria: true, pasajeros_max: 120, pasajeros_alerta_min: 5, minutos_duplicado: 90, tolerancia_capacidad_pct: 10, noche_desde: 19, noche_hasta: 4, mostrar_ibao: true };
+const DEF = { foto_obligatoria: true, pasajeros_max: 120, pasajeros_alerta_min: 5, minutos_duplicado: 90, tolerancia_capacidad_pct: 10, noche_desde: 19, noche_hasta: 4, mostrar_ibao: true, lectura_automatica: false };
+const AUTO = () => !!R.lectura_automatica;   // el sistema lee la placa de la foto; el controlador la valida después en «Revisar»
 let CF = null, R = { ...DEF }, PL = new Map(), PCODES = [], RU = [], RBY = new Map(), cfgAt = 0;
 const S = { ctrl: '', trq: '', turno: 'DIA', mov: 'Entrada', placa: '', ruta: '', touched: false, foto: null, fotoUrl: '', extras: {} };
 let RECS = [], defs = [], TURNOS = [], T = null;
@@ -54,6 +55,7 @@ function applyConfig(cfg) {
   RBY = new Map(RU.map(r => [r.k, r]));
   fillStart();
   buildFields();
+  $('f-placa').hidden = AUTO(); updateRevUi();
   const el = $('foot-cfg'); if (el) el.textContent = 'Catálogos ' + (cfg.version || '') + (cfgAt ? ' · ' + new Date(cfgAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '');
 }
 
@@ -72,7 +74,7 @@ function fillTrq(sel) {
   st.value = [...st.options].some(o => o.value === sel) ? sel : '';
 }
 const okStart = () => { $('go').disabled = !($('s-ctrl').value && $('s-trq').value); };
-$('s-ctrl').onchange = () => { fillTrq(''); okStart(); };
+$('s-ctrl').onchange = () => { fillTrq(''); okStart(); updateRevUi(); };
 $('s-trq').onchange = okStart;
 $('go').onclick = () => {
   S.ctrl = $('s-ctrl').value; S.trq = $('s-trq').value; ls.set('ctrl_sess', { ctrl: S.ctrl, trq: S.trq });
@@ -83,7 +85,7 @@ $('go').onclick = () => {
 function showStart() {
   T = null; $('v-main').hidden = true; $('v-start').hidden = false;
   S.turno = suggestTurno(); setSeg('s-turno', S.turno);
-  $('s-ctrl').value = S.ctrl; fillTrq(S.trq); okStart();
+  $('s-ctrl').value = S.ctrl; fillTrq(S.trq); okStart(); updateRevUi();
 }
 function showMain() {
   $('v-start').hidden = true; $('v-main').hidden = false;
@@ -167,13 +169,14 @@ async function comprimirBmp(bmp) {
   }
   return b;
 }
+const focusAfterPhoto = () => (AUTO() ? $('ruta') : $('placa')).focus();
 fotoIn.addEventListener('change', async () => {
   const f = fotoIn.files && fotoIn.files[0]; if (!f) return;
   try {
     S.foto = await comprimir(f);
     if (S.fotoUrl) URL.revokeObjectURL(S.fotoUrl);
     S.fotoUrl = URL.createObjectURL(S.foto); showPhoto();
-    $('placa').focus();
+    focusAfterPhoto();
   } catch (e) { toast('No se pudo leer la foto. Intenta de nuevo.'); }
   fotoIn.value = ''; recompute();
 });
@@ -197,7 +200,7 @@ async function camShoot() {
     if (S.fotoUrl) URL.revokeObjectURL(S.fotoUrl);
     S.fotoUrl = URL.createObjectURL(S.foto); showPhoto();
     if (navigator.vibrate) navigator.vibrate(30);
-    camClose(); $('placa').focus();
+    camClose(); focusAfterPhoto();
   } catch (e) { toast('No se pudo tomar la foto. Intenta de nuevo.'); }
   recompute();
 }
@@ -298,9 +301,9 @@ function recent() { const lim = Date.now() - Number(R.minutos_duplicado) * 60000
 function recompute() {
   if ($('v-main').hidden) return;
   const n = px.value === '' ? null : Number(px.value), info = PL.get(S.placa), w = [];
-  const okPlate = /^[A-Z0-9]{6}$/.test(S.placa), okRuta = S.ruta.trim().length > 0, okN = n !== null && n <= Number(R.pasajeros_max);
-  const okFoto = !R.foto_obligatoria || !!S.foto, okTurno = !!(T && !T.fin);
-  const dup = okPlate ? recent() : null;
+  const okPlate = AUTO() || /^[A-Z0-9]{6}$/.test(S.placa), okRuta = S.ruta.trim().length > 0, okN = n !== null && n <= Number(R.pasajeros_max);
+  const okFoto = (!R.foto_obligatoria && !AUTO()) || !!S.foto, okTurno = !!(T && !T.fin);
+  const dup = (okPlate && !AUTO()) ? recent() : null;
   if (dup) { const t = new Date(dup.doc.ts); w.push(['Ya registrada a las ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ' (' + dup.doc.mov + ', ' + dup.doc.ruta + '). Si es otro viaje, registra igual.', 0]); }
   if (okRuta && !RBY.has(norm(S.ruta))) w.push(['Ruta fuera del catálogo: se guarda como ruta nueva.', 0]);
   if (n !== null && n > Number(R.pasajeros_max)) w.push(['Más de ' + R.pasajeros_max + ' pasajeros: revisa el número.', 1]);
@@ -313,9 +316,10 @@ function recompute() {
   const falt = defs.filter(c => c.obligatorio && visible(c) && String(S.extras[c.id] ?? '').trim() === '');
   const ok = okTurno && okPlate && okRuta && okN && okFoto && !falt.length;
   const b = $('reg'); b.disabled = !ok; b.textContent = dup ? 'Registrar otro viaje' : 'Registrar unidad'; b.classList.toggle('again', !!dup && ok);
-  photoBtn.classList.toggle('req', !!R.foto_obligatoria);
+  photoBtn.classList.toggle('req', !!R.foto_obligatoria || AUTO());
   const miss = [!okTurno && 'iniciar turno', !okFoto && 'foto', !okPlate && 'placa (6 caracteres)', !okRuta && 'ruta', !okN && 'pasajeros'].filter(Boolean).concat(falt.map(c => c.etiqueta));
   $('hint').textContent = ok ? 'Enter en pasajeros también registra' : 'Falta: ' + miss.join(', ');
+  scheduleDraft();
 }
 
 /* ---------- guardar ---------- */
@@ -326,12 +330,12 @@ async function submit() {
   const extras = {}; defs.forEach(c => { const v = S.extras[c.id]; if (visible(c) && v !== undefined && String(v) !== '') extras[c.columna || c.etiqueta] = v; });
   const doc = {
     id: newId(), ts: now.getTime(), fecha: ymd(now), hora: pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()),
-    dia: T.fecha, tid: T.id, semana: isoWeek(now), ctrl: S.ctrl, trq: S.trq, turno: T.tipo, mov: S.mov, placa: S.placa,
-    ruta: can ? can.n : S.ruta.trim(), zona: can ? can.z : '', pas: Number(px.value), ibao: ibaoOf(info), nueva: !info, extras
+    dia: T.fecha, tid: T.id, semana: isoWeek(now), ctrl: S.ctrl, trq: S.trq, turno: T.tipo, mov: S.mov, placa: AUTO() ? '' : S.placa, auto: AUTO(),
+    ruta: can ? can.n : S.ruta.trim(), zona: can ? can.z : '', pas: Number(px.value), ibao: AUTO() ? '' : ibaoOf(info), nueva: AUTO() ? false : !info, extras
   };
-  const rec = { id: doc.id, estado: 'pend', doc, foto: S.foto || null, intentos: 0 };
+  const rec = { id: doc.id, estado: 'pend', doc, foto: S.foto || null, intentos: 0, rev: doc.auto ? 'no' : '' };
   RECS.push(rec); await recPut(rec);
-  lastId = rec.id; toast(S.placa + ' registrada · ' + doc.pas + ' pasajeros', true);
+  lastId = rec.id; toast((AUTO() ? 'Bus registrado' : S.placa + ' registrada') + ' · ' + doc.pas + ' pasajeros', true);
   resetForm(); renderList(); setStatus(); setTimeout(sync, 400);
 }
 function resetForm() {
@@ -339,7 +343,7 @@ function resetForm() {
   S.foto = null; if (S.fotoUrl) URL.revokeObjectURL(S.fotoUrl); S.fotoUrl = ''; showPhoto();
   resetFields(); renderChips(recentRoutes()); recompute();
   // primer paso del siguiente bus: la foto (si es obligatoria) o la placa
-  (R.foto_obligatoria ? photoBtn : pl).focus();
+  (R.foto_obligatoria || AUTO() ? photoBtn : pl).focus();
 }
 
 /* ---------- envío (cola) ---------- */
@@ -365,13 +369,14 @@ async function sync() {
       }
       const pend = RECS.filter(r => r.estado === 'pend').sort((a, b) => a.doc.ts - b.doc.ts).slice(0, 6);
       const an = RECS.filter(r => r.estado === 'anul').slice(0, 30);
-      if (!pend.length && !an.length) break;
+      const rv = RECS.filter(r => r.estado === 'ok' && r.rev === 'conf').slice(0, 40);
+      if (!pend.length && !an.length && !rv.length) break;
       if (pend.length) {
         const regs = []; for (const r of pend) { const o = { ...r.doc }; if (r.foto) o.fotoB64 = await toB64(r.foto); regs.push(o); }
         const res = await post({ action: 'registrar', registros: regs });
         if (!res.ok) { if (res.error === 'token') authErr = true; throw new Error(res.error || 'servidor'); }
         authErr = false; let fallo = false;
-        for (const x of res.resultados) { const r = RECS.find(q => q.id === x.id); if (!r) continue; if (x.ok) { r.estado = 'ok'; r.foto = null; } else { r.intentos++; fallo = true; } await recPut(r); }
+        for (const x of res.resultados) { const r = RECS.find(q => q.id === x.id); if (!r) continue; if (x.ok) { r.estado = 'ok'; if (!r.doc.auto) r.foto = null; } else { r.intentos++; fallo = true; } await recPut(r); }
         if (fallo) throw new Error('registro rechazado');
       }
       if (an.length) {
@@ -379,14 +384,20 @@ async function sync() {
         if (!res.ok) throw new Error(res.error || 'servidor');
         for (const x of res.resultados) { const r = RECS.find(q => q.id === x.id); if (r && x.ok) { r.estado = 'anulado'; await recPut(r); } }
       }
+      if (rv.length) {
+        const res = await post({ action: 'revisar', items: rv.map(r => ({ id: r.id, placa: r.doc.placa, corregida: !!r.corr, ctrl: r.revBy || r.doc.ctrl, ts: r.revAt })) });
+        if (!res.ok) throw new Error(res.error || 'servidor');
+        for (const x of res.resultados) { const r = RECS.find(q => q.id === x.id); if (r && x.ok) { r.rev = 'si'; r.foto = null; await recPut(r); } }
+      }
       netOk = true; renderList(); setStatus();
     }
     netOk = true;
+    await fetchLecturas();
   } catch (e) { netOk = false; retryT = setTimeout(sync, 12000); }
   finally { syncing = false; setStatus(); renderList(); }
 }
 function setStatus() {
-  const n = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul').length;
+  const n = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul' || r.rev === 'conf').length;
   let cls = '', txt;
   if (!hasApi()) { cls = 'off'; txt = n ? n + ' guardados solo en este equipo (falta configurar el servidor)' : 'Modo prueba: sin servidor'; }
   else if (authErr) { cls = 'off'; txt = 'Código de acceso inválido (' + n + ' pendientes)'; }
@@ -398,7 +409,7 @@ function setStatus() {
 }
 window.addEventListener('online', () => { sync(); refreshConfig(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); refreshConfig(); } });
-setInterval(() => { if (RECS.some(r => r.estado === 'pend' || r.estado === 'anul') || TURNOS.some(t => t.dirty)) sync(); }, 20000);
+setInterval(() => { if (RECS.some(r => r.estado === 'pend' || r.estado === 'anul' || r.rev === 'conf' || waitingRead(r)) || TURNOS.some(t => t.dirty)) sync(); }, 20000);
 
 async function refreshConfig(force) {
   if (!hasApi() || (!force && Date.now() - cfgAt < 10 * 60000)) return;
@@ -412,6 +423,85 @@ async function refreshConfig(force) {
   } catch (e) { /* sin señal: se queda la configuración guardada */ }
 }
 let pendingCfg = null;
+
+/* ---------- lectura automática: lo que leyó el sistema ---------- */
+const waitingRead = r => r.rev === 'no' && r.estado === 'ok' && !r.lect;
+async function fetchLecturas() {
+  const w = RECS.filter(waitingRead).slice(0, 80); if (!w.length) return;
+  const res = await post({ action: 'lecturas', ids: w.map(r => r.id) });
+  if (!res.ok || !res.lecturas) return;
+  let ch = false;
+  w.forEach(r => {
+    const x = res.lecturas[r.id]; if (!x) return;
+    if (x.p) { r.lectura = x.p; r.lect = true; ch = true; recPut(r); }
+    else if (['NULO', 'ERROR', 'SIN FOTO'].includes(x.e)) { r.lectura = ''; r.lect = true; ch = true; recPut(r); }
+  });
+  if (ch) renderRev();
+}
+
+/* ---------- Revisar: foto + placa leída; «Correcta» o corregir y luego «Correcta» ---------- */
+const REVMAX = 15; let revFrom = 'main', revUrls = [], revDirty = false;
+const revCtrl = () => (T && T.ctrl) || $('s-ctrl').value || S.ctrl || '';
+function revList() { const c = revCtrl(); return RECS.filter(r => r.rev === 'no' && (r.estado === 'ok' || r.estado === 'pend') && (!c || r.doc.ctrl === c)).sort((a, b) => a.doc.ts - b.doc.ts); }
+function updateRevUi() {
+  const n = revList().length, any = AUTO() || RECS.some(r => r.rev === 'no' || r.rev === 'conf');
+  $('tab-rev').hidden = !any; $('rev-n').textContent = n || '';
+  const g = $('go-rev'); g.hidden = !n; g.textContent = 'Revisar placas (' + n + ')';
+  $('t-rev-row').hidden = !any; $('t-rev').textContent = n ? n + ' por revisar' : 'Todo revisado'; $('t-rev').className = n ? 'warnt' : '';
+}
+function showRev() {
+  revFrom = $('v-main').hidden ? 'start' : 'main';
+  $('v-main').hidden = true; $('v-start').hidden = true; $('v-rev').hidden = false; window.scrollTo(0, 0); renderRev(); sync();
+}
+$('tab-rev').onclick = showRev; $('go-rev').onclick = showRev;
+$('rev-back').onclick = () => {
+  $('v-rev').hidden = true;
+  if (revFrom === 'main' && T) { $('v-main').hidden = false; renderList(); recompute(); } else $('v-start').hidden = false;
+  updateRevUi();
+};
+$('rev-list').addEventListener('focusout', () => { setTimeout(() => { if (revDirty && !$('rev-list').contains(document.activeElement)) { revDirty = false; renderRev(); } }, 50); });
+function renderRev() {
+  if ($('v-rev').hidden) return;
+  const box = $('rev-list');
+  if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { revDirty = true; return; }
+  revUrls.forEach(u => URL.revokeObjectURL(u)); revUrls = []; box.innerHTML = '';
+  const all = revList(); $('rev-sub').textContent = all.length ? all.length + ' por revisar' : '';
+  $('rev-help').hidden = !all.length;
+  if (!all.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Todo revisado. No tienes placas pendientes.'; box.appendChild(d); }
+  all.slice(0, REVMAX).forEach(r => box.appendChild(revRow(r)));
+  const more = $('rev-more'); more.hidden = all.length <= REVMAX; more.textContent = 'Faltan ' + Math.max(0, all.length - REVMAX) + ' más: aparecen al ir confirmando.';
+  updateRevUi();
+}
+function revRow(r) {
+  const d = r.doc, w = document.createElement('div'); w.className = 'rv';
+  const meta = document.createElement('div'); meta.className = 'meta';
+  const m1 = document.createElement('span'); m1.textContent = d.hora.slice(0, 5) + ' · ' + d.mov + ' · ' + d.ruta;
+  const m2 = document.createElement('span'); m2.textContent = d.pas + ' pas.'; meta.append(m1, m2); w.appendChild(meta);
+  if (r.foto) { const im = document.createElement('img'); const u = URL.createObjectURL(r.foto); revUrls.push(u); im.src = u; im.alt = 'Foto de la placa'; w.appendChild(im); }
+  else { const nf = document.createElement('div'); nf.className = 'noimg'; nf.textContent = 'Sin foto en este equipo'; w.appendChild(nf); }
+  const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off'; inp.autocapitalize = 'characters'; inp.spellcheck = false; inp.maxLength = 6; inp.setAttribute('aria-label', 'Placa');
+  inp.value = r.edit !== undefined ? r.edit : (r.lectura || ''); w.appendChild(inp);
+  const st = document.createElement('div'); st.className = 'st'; w.appendChild(st);
+  const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn primary'; ok.textContent = 'Correcta'; w.appendChild(ok);
+  const upd = () => {
+    const v = inp.value, good = /^[A-Z0-9]{6}$/.test(v); ok.disabled = !good; st.className = 'st';
+    if (good) { const i = PL.get(v); st.textContent = i ? (i.estado === 'ACTIVO' ? 'IBAO: registrada' : 'IBAO: inactiva') : 'No está en IBAO (se guarda igual)'; st.classList.add(i && i.estado === 'ACTIVO' ? 'ok' : 'new'); }
+    else if (!v && !r.lect) st.textContent = r.estado === 'pend' ? 'Aún sin enviar: espera la señal' : 'Leyendo la placa…';
+    else if (!v) st.textContent = 'No se pudo leer: escríbela viendo la foto';
+    else st.textContent = 'Deben ser 6 letras o números';
+  };
+  inp.addEventListener('input', () => { const p = inp.selectionStart; inp.value = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); try { inp.setSelectionRange(p, p); } catch (e) {} r.edit = inp.value; upd(); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !ok.disabled) { e.preventDefault(); ok.click(); } });
+  ok.onclick = () => confirmRev(r, inp.value);
+  upd(); return w;
+}
+async function confirmRev(r, v) {
+  if (!/^[A-Z0-9]{6}$/.test(v) || r.rev !== 'no') return;
+  const info = PL.get(v);
+  r.rev = 'conf'; r.doc.placa = v; r.doc.ibao = ibaoOf(info); r.doc.nueva = !info;
+  r.corr = v !== (r.lectura || ''); r.revAt = Date.now(); r.revBy = revCtrl() || r.doc.ctrl; delete r.edit;
+  await recPut(r); revDirty = false; renderRev(); setStatus(); setTimeout(sync, 100);
+}
 
 /* ---------- toast, anular ---------- */
 let toastT = null;
@@ -445,7 +535,10 @@ function renderList() {
   const pend = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul').length;
   $('t-pend').textContent = pend ? pend + ' sin enviar' : 'Todo enviado'; $('t-pend').className = pend ? 'warnt' : '';
   $('t-anul').textContent = mine.filter(r => r.estado === 'anulado' || r.estado === 'anul').length;
+  updateRevUi();
   const closed = !!T.fin;
+  const back = $('t-back'); back.hidden = closed || mine.length > 0 || !$('back-confirm').hidden;   // solo se puede volver si aún no hay ningún bus
+  if (closed || mine.length) $('back-confirm').hidden = true;
   $('t-close').hidden = closed; if (closed) $('t-confirm').hidden = true;
   $('t-closed').hidden = !closed;
   if (closed) $('t-closed-t').textContent = 'Turno cerrado a las ' + hm(T.fin) + ' · duró ' + dur(T.fin - T.ini) + ' · ' + T.buses + ' buses';
@@ -458,12 +551,13 @@ function renderList() {
   all.forEach(r => {
     const d = r.doc, gone = r.estado === 'anulado' || r.estado === 'anul', row = document.createElement('div'); row.className = 'row' + (gone ? ' gone' : '');
     const t = document.createElement('span'); t.className = 't'; t.textContent = d.hora.slice(0, 5);
-    const p = document.createElement('span'); p.className = 'p'; p.textContent = d.placa;
+    const p = document.createElement('span'); p.className = 'p'; p.textContent = d.placa || r.lectura || '·····';
     const tags = document.createElement('span'); tags.className = 'tags';
     const tm = document.createElement('span'); tm.className = 'tag'; tm.textContent = d.mov === 'Entrada' ? 'E' : 'S'; tags.appendChild(tm);
     if (d.tid !== T.id) { const q = document.createElement('span'); q.className = 'tag'; q.textContent = d.turno === 'DIA' ? 'día' : 'noche'; tags.appendChild(q); }
     if (gone) { const q = document.createElement('span'); q.className = 'tag'; q.textContent = 'anulado'; tags.appendChild(q); }
     else if (r.estado === 'pend') { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'sin enviar'; tags.appendChild(q); }
+    if (r.rev === 'no' && !gone) { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'por revisar'; tags.appendChild(q); }
     if (d.nueva && !gone) { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'no está en IBAO'; tags.appendChild(q); }
     const n2 = document.createElement('span'); n2.className = 'n'; n2.textContent = d.pas;
     const x = document.createElement('button'); x.className = 'link'; x.textContent = 'Anular'; x.hidden = gone;
@@ -473,8 +567,8 @@ function renderList() {
   });
 }
 $('t-close').onclick = () => {
-  const act = RECS.filter(r => r.doc.tid === T.id && (r.estado === 'pend' || r.estado === 'ok')).length, pend = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul').length;
-  $('t-confirm-t').textContent = 'Vas a cerrar el turno con ' + act + ' buses.' + (pend ? ' Hay ' + pend + ' registros sin enviar: se enviarán solos cuando haya señal; no cierres la app hasta entonces.' : '');
+  const act = RECS.filter(r => r.doc.tid === T.id && (r.estado === 'pend' || r.estado === 'ok')).length, pend = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul').length, rvn = revList().length;
+  $('t-confirm-t').textContent = 'Vas a cerrar el turno con ' + act + ' buses.' + (rvn ? ' Te quedan ' + rvn + ' placas por revisar: las revisas desde «Revisar».' : '') + (pend ? ' Hay ' + pend + ' registros sin enviar: se enviarán solos cuando haya señal; no cierres la app hasta entonces.' : '');
   $('t-confirm').hidden = false; $('t-close').hidden = true;
 };
 $('t-no').onclick = () => { $('t-confirm').hidden = true; $('t-close').hidden = false; };
@@ -484,12 +578,48 @@ $('t-yes').onclick = () => {
 };
 $('t-new').onclick = showStart;
 
+/* ---------- volver: cancelar un turno empezado por error (solo si no hay ningún bus registrado) ---------- */
+$('t-back').onclick = () => { $('back-confirm').hidden = false; $('t-back').hidden = true; };
+$('back-no').onclick = () => { $('back-confirm').hidden = true; renderList(); };
+$('back-yes').onclick = async () => {
+  if (!T) return;
+  if (RECS.some(r => r.doc.tid === T.id)) { $('back-confirm').hidden = true; renderList(); toast('Ya hay buses en este turno: usa «Cerrar turno» en Mi turno.'); return; }
+  const t = T;
+  if (t.v === 1 && t.dirty) TURNOS = TURNOS.filter(x => x.id !== t.id);   // nunca llegó al servidor: se descarta sin dejar rastro
+  else { t.fin = Date.now(); t.estado = 'CANCELADO'; t.buses = 0; t.v++; t.dirty = true; }   // ya estaba en el servidor: se marca cancelado para que no quede «abierto»
+  clearTimeout(draftT); await saveTurnos(); await metaPut('draft', null);
+  $('back-confirm').hidden = true; showStart(); setTimeout(sync, 200);
+};
+
+/* ---------- borrador: si entra una llamada o se cierra la app, el bus a medio llenar no se pierde ---------- */
+let draftT = null;
+function scheduleDraft() { clearTimeout(draftT); draftT = setTimeout(saveDraft, 400); }
+async function saveDraft() {
+  if (!T || T.fin || $('v-main').hidden) return;
+  const d = { tid: T.id, mov: S.mov, placa: S.placa, ruta: S.ruta, pas: px.value, extras: S.extras, foto: S.foto || null };
+  await metaPut('draft', (!d.foto && !d.placa && !d.ruta && !d.pas) ? null : d);
+}
+async function restoreDraft() {
+  let d = null; try { d = await metaGet('draft'); } catch (e) {}
+  if (!d || !T || T.fin || d.tid !== T.id) return;
+  S.mov = d.mov || S.mov; setSeg('seg-mov', S.mov);
+  if (d.foto) { S.foto = d.foto; S.fotoUrl = URL.createObjectURL(d.foto); showPhoto(); }
+  if (d.placa) { pl.value = d.placa; onPlate(d.placa, false); }
+  if (d.ruta) { S.touched = true; setRuta(d.ruta); }
+  if (d.pas) px.value = d.pas;
+  Object.keys(d.extras || {}).forEach(k => { if (defs.some(c => c.id === k)) setField(k, d.extras[k], true); });
+  updateVisibility(); recompute();
+  if (d.foto || d.placa || d.ruta || d.pas) toast('Recuperé el bus que estabas registrando.');
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(draftT); saveDraft(); } });
+window.addEventListener('pagehide', () => { clearTimeout(draftT); saveDraft(); });
+
 /* ---------- arranque ---------- */
 (async function init() {
   try { RECS = (await idb.all('rec')) || []; } catch (e) { RECS = []; }
-  const limite = Date.now() - 3 * 864e5;
-  for (const r of RECS.filter(r => (r.estado === 'ok' || r.estado === 'anulado') && r.doc.ts < limite)) await recDel(r.id);
-  RECS = RECS.filter(r => !((r.estado === 'ok' || r.estado === 'anulado') && r.doc.ts < limite));
+  const limite = Date.now() - 3 * 864e5, viejo = r => (r.estado === 'ok' || r.estado === 'anulado') && r.doc.ts < limite && r.rev !== 'no' && r.rev !== 'conf';   // lo que falta revisar nunca se borra
+  for (const r of RECS.filter(viejo)) await recDel(r.id);
+  RECS = RECS.filter(r => !viejo(r));
   try { TURNOS = (await metaGet('turnos')) || []; } catch (e) { TURNOS = []; }
   T = TURNOS.filter(t => !t.fin).pop() || null;
   const sess0 = ls.get('ctrl_sess'); if (sess0) { S.ctrl = sess0.ctrl; S.trq = sess0.trq; }
@@ -500,7 +630,7 @@ $('t-new').onclick = showStart;
     catch (e) { await refreshConfig(true); }   // sin copia inicial: se descargan de la hoja (requiere señal la primera vez)
     if (!CF) $('cfg-note').textContent = 'No se pudieron cargar los catálogos. Abre la app una vez con señal.';
   }
-  if (CF && T && !T.fin) showMain();
+  if (CF && T && !T.fin) { showMain(); await restoreDraft(); }
   else if (CF) showStart(); else $('v-start').hidden = false;
   $('cfg-note').textContent = hasApi() ? '' : 'Modo prueba: falta configurar el servidor en config.js. Los registros quedan solo en este equipo.';
   setStatus(); refreshConfig(true); sync();
