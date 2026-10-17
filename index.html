@@ -28,6 +28,7 @@
       <div class="seg" id="s-turno"><button type="button" data-v="DIA" aria-pressed="true">Día</button><button type="button" data-v="NOCHE" aria-pressed="false">Noche</button></div></div>
     <button class="btn primary" id="go" disabled>Iniciar turno</button>
     <button class="btn" id="go-rev" type="button" hidden>Revisar placas</button>
+    <button class="btn" id="go-hist" type="button" hidden>Mis turnos de la semana</button>
     <p class="note" id="cfg-note"></p>
   </div>
 </section>
@@ -122,8 +123,9 @@
   </div>
 
   <div class="card">
-    <div class="list-h"><b>Registros de hoy</b><span class="note" id="l-sub"></span></div>
-    <div class="list" id="list"></div>
+    <div class="list-h"><b>Mi semana</b><span class="note" id="l-sub"></span></div>
+    <p class="note">Toca un turno para ver sus registros. Se guardan 7 días en este equipo.</p>
+    <div class="weeklist" id="week"></div>
   </div>
 </div>
 
@@ -143,6 +145,23 @@
   <video id="cam-v" playsinline muted autoplay></video>
   <div class="cam-bar"><button type="button" class="btn" id="cam-x">Cancelar</button><button type="button" class="shoot" id="cam-shoot" aria-label="Tomar foto"></button><span></span></div>
 </div>
+<section id="v-hist" hidden class="wrap-rev">
+  <div class="top">
+    <div class="who"><b id="h-title"></b><span id="h-sub"></span></div>
+    <div class="top-r"><button type="button" class="link" id="h-back">← Volver</button></div>
+  </div>
+  <div id="h-listwrap">
+    <div class="card hfilter">
+      <div class="hf2">
+        <div class="field"><label for="h-placa">Placa</label><input id="h-placa" type="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="6" placeholder="Ej. A1B"></div>
+        <div class="field"><label for="h-ruta">Ruta</label><input id="h-ruta" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Ej. Catacaos"></div>
+      </div>
+      <div class="list-h"><span class="note" id="h-count"></span><button type="button" class="link" id="h-clear" hidden>Borrar búsqueda</button></div>
+    </div>
+    <div class="list card" id="h-list"></div>
+  </div>
+  <div class="card" id="h-det" hidden></div>
+</section>
 <div class="toast" id="toast" hidden></div>
 <script src="config.js"></script>
 <script src="app.js"></script>

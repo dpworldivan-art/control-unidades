@@ -39,13 +39,13 @@ async function recDel(id) { try { await idb.del('rec', id); } catch (e) {} }
 const DEF = { foto_obligatoria: true, pasajeros_max: 120, pasajeros_alerta_min: 5, minutos_duplicado: 90, tolerancia_capacidad_pct: 10, noche_desde: 19, noche_hasta: 4, mostrar_ibao: true, lectura_automatica: false };
 const AUTO = () => !!R.lectura_automatica;   // el sistema lee la placa de la foto; el controlador la valida después en «Revisar»
 let CF = null, R = { ...DEF }, PL = new Map(), PCODES = [], RU = [], RBY = new Map(), cfgAt = 0;
-const S = { ctrl: '', trq: '', turno: 'DIA', mov: 'Entrada', placa: '', ruta: '', touched: false, foto: null, fotoUrl: '', extras: {} };
+const S = { ctrl: '', trq: '', turno: 'DIA', mov: 'Entrada', placa: '', ruta: '', touched: false, foto: null, fotoUrl: '', pid: '', extras: {} };
 let RECS = [], defs = [], TURNOS = [], T = null;
 const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 const ibaoOf = i => !i ? 'No' : (i.estado === 'ACTIVO' ? 'Sí' : 'Inactiva');
 
 const suggestTurno = () => { const h = new Date().getHours(); return (h >= 3 && h < 14) ? 'DIA' : 'NOCHE'; };   // solo sugiere: el controlador decide
-async function saveTurnos() { const lim = Date.now() - 4 * 864e5; TURNOS = TURNOS.filter(t => !t.fin || t.dirty || t.ini > lim); await metaPut('turnos', TURNOS); }
+async function saveTurnos() { const lim = Date.now() - 8 * 864e5; TURNOS = TURNOS.filter(t => !t.fin || t.dirty || t.ini > lim); await metaPut('turnos', TURNOS); }
 
 function applyConfig(cfg) {
   CF = cfg; R = { ...DEF, ...(cfg.reglas || {}) };
@@ -153,21 +153,40 @@ function resetFields() { defs.forEach(c => setField(c.id, c.defecto || '', true)
 
 /* ---------- foto ---------- */
 const photoBtn = $('photo-btn'), fotoIn = $('foto');
+const trqName = id => { const x = CF && CF.tranqueras.find(q => q.id === id); return x ? x.n : id; };
+/* marca de agua: franja negra debajo de la foto (no tapa la placa) con fecha, hora, tranquera, controlador, turno y código del registro */
+function marcaTexto() {
+  const n = new Date(); S.pid = newId();
+  return pad(n.getDate()) + '/' + pad(n.getMonth() + 1) + '/' + n.getFullYear() + ' ' + pad(n.getHours()) + ':' + pad(n.getMinutes()) + ':' + pad(n.getSeconds()) +
+    ' · ' + trqName(S.trq) + ' · ' + S.ctrl + ' · ' + (S.turno === 'DIA' ? 'DÍA' : 'NOCHE') + ' · #' + S.pid.slice(-6).toUpperCase();
+}
 async function comprimir(file) {
   let bmp;
   try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); }
   return comprimirBmp(bmp);
 }
 async function comprimirBmp(bmp) {
-  let b = null;
+  let b = null; const txt = marcaTexto();
   for (const [lado, q] of [[960, 0.6], [960, 0.45], [800, 0.4], [640, 0.4]]) {
-    const k = Math.min(1, lado / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const k = Math.min(1, lado / Math.max(bmp.width, bmp.height)), w = Math.round(bmp.width * k), h = Math.round(bmp.height * k), sh = Math.max(24, Math.round(w * 0.035));
+    const c = document.createElement('canvas'); c.width = w; c.height = h + sh;
+    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0, w, h);
+    g.fillStyle = '#000'; g.fillRect(0, h, w, sh); g.fillStyle = '#fff'; g.textBaseline = 'middle';
+    let fs = Math.round(sh * 0.62); const setF = () => { g.font = '600 ' + fs + 'px system-ui, Roboto, Arial, sans-serif'; }; setF();
+    while (g.measureText(txt).width > w - 14 && fs > 8) { fs--; setF(); }
+    g.fillText(txt, 7, h + sh / 2 + 1);
     b = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
     if (b.size <= 100000) break;   // objetivo: ~100 KB o menos por foto
   }
   return b;
+}
+async function thumbOf(blob) {   // miniatura para el historial semanal (~20 KB)
+  try {
+    const bmp = await createImageBitmap(blob), k = Math.min(1, 400 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.5));
+  } catch (e) { return null; }
 }
 const focusAfterPhoto = () => (AUTO() ? $('ruta') : $('placa')).focus();
 fotoIn.addEventListener('change', async () => {
@@ -326,21 +345,22 @@ function recompute() {
 const newId = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 async function submit() {
   if ($('reg').disabled || !T || T.fin) return;
+  $('reg').disabled = true;   // evita doble toque mientras se guarda
   const now = new Date(), info = PL.get(S.placa), can = RBY.get(norm(S.ruta));
   const extras = {}; defs.forEach(c => { const v = S.extras[c.id]; if (visible(c) && v !== undefined && String(v) !== '') extras[c.columna || c.etiqueta] = v; });
   const doc = {
-    id: newId(), ts: now.getTime(), fecha: ymd(now), hora: pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()),
+    id: S.pid || newId(), ts: now.getTime(), fecha: ymd(now), hora: pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()),
     dia: T.fecha, tid: T.id, semana: isoWeek(now), ctrl: S.ctrl, trq: S.trq, turno: T.tipo, mov: S.mov, placa: AUTO() ? '' : S.placa, auto: AUTO(),
     ruta: can ? can.n : S.ruta.trim(), zona: can ? can.z : '', pas: Number(px.value), ibao: AUTO() ? '' : ibaoOf(info), nueva: AUTO() ? false : !info, extras
   };
-  const rec = { id: doc.id, estado: 'pend', doc, foto: S.foto || null, intentos: 0, rev: doc.auto ? 'no' : '' };
+  const rec = { id: doc.id, estado: 'pend', doc, foto: S.foto || null, thumb: S.foto ? await thumbOf(S.foto) : null, intentos: 0, rev: doc.auto ? 'no' : '' };
   RECS.push(rec); await recPut(rec);
   lastId = rec.id; toast((AUTO() ? 'Bus registrado' : S.placa + ' registrada') + ' · ' + doc.pas + ' pasajeros', true);
   resetForm(); renderList(); setStatus(); setTimeout(sync, 400);
 }
 function resetForm() {
   S.placa = ''; S.touched = false; pl.value = ''; $('plen').textContent = '0/6'; px.value = ''; $('pinfo').hidden = true; setRuta('');
-  S.foto = null; if (S.fotoUrl) URL.revokeObjectURL(S.fotoUrl); S.fotoUrl = ''; showPhoto();
+  S.foto = null; S.pid = ''; if (S.fotoUrl) URL.revokeObjectURL(S.fotoUrl); S.fotoUrl = ''; showPhoto();
   resetFields(); renderChips(recentRoutes()); recompute();
   // primer paso del siguiente bus: la foto (si es obligatoria) o la placa
   (R.foto_obligatoria || AUTO() ? photoBtn : pl).focus();
@@ -447,6 +467,7 @@ function updateRevUi() {
   const n = revList().length, any = AUTO() || RECS.some(r => r.rev === 'no' || r.rev === 'conf');
   $('tab-rev').hidden = !any; $('rev-n').textContent = n || '';
   const g = $('go-rev'); g.hidden = !n; g.textContent = 'Revisar placas (' + n + ')';
+  $('go-hist').hidden = !histGroups().length;
   $('t-rev-row').hidden = !any; $('t-rev').textContent = n ? n + ' por revisar' : 'Todo revisado'; $('t-rev').className = n ? 'warnt' : '';
 }
 function showRev() {
@@ -520,6 +541,7 @@ async function anular(id) {
 /* ---------- Mi turno: contadores y lista ---------- */
 const dur = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; };
 function renderList() {
+  if (!$('v-hist').hidden) renderHist();
   if ($('v-main').hidden || !T) return;
   const mine = RECS.filter(r => r.doc.tid === T.id);
   const act = mine.filter(r => r.estado === 'pend' || r.estado === 'ok').sort((a, b) => a.doc.ts - b.doc.ts);
@@ -544,28 +566,133 @@ function renderList() {
   if (closed) $('t-closed-t').textContent = 'Turno cerrado a las ' + hm(T.fin) + ' · duró ' + dur(T.fin - T.ini) + ' · ' + T.buses + ' buses';
   $('foot-day').textContent = 'Turno ' + (T.tipo === 'DIA' ? 'día' : 'noche') + ' del ' + T.fecha;
 
-  const all = RECS.filter(r => r.doc.dia === T.fecha && r.doc.ctrl === S.ctrl).sort((a, b) => b.doc.ts - a.doc.ts);
-  $('l-sub').textContent = all.length + ' registros hoy';
-  const L = $('list'); L.innerHTML = '';
-  if (!all.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Aún no hay registros. El primero aparece aquí apenas lo guardes.'; L.appendChild(d); return; }
-  all.forEach(r => {
-    const d = r.doc, gone = r.estado === 'anulado' || r.estado === 'anul', row = document.createElement('div'); row.className = 'row' + (gone ? ' gone' : '');
-    const t = document.createElement('span'); t.className = 't'; t.textContent = d.hora.slice(0, 5);
-    const p = document.createElement('span'); p.className = 'p'; p.textContent = d.placa || r.lectura || '·····';
-    const tags = document.createElement('span'); tags.className = 'tags';
-    const tm = document.createElement('span'); tm.className = 'tag'; tm.textContent = d.mov === 'Entrada' ? 'E' : 'S'; tags.appendChild(tm);
-    if (d.tid !== T.id) { const q = document.createElement('span'); q.className = 'tag'; q.textContent = d.turno === 'DIA' ? 'día' : 'noche'; tags.appendChild(q); }
-    if (gone) { const q = document.createElement('span'); q.className = 'tag'; q.textContent = 'anulado'; tags.appendChild(q); }
-    else if (r.estado === 'pend') { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'sin enviar'; tags.appendChild(q); }
-    if (r.rev === 'no' && !gone) { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'por revisar'; tags.appendChild(q); }
-    if (d.nueva && !gone) { const q = document.createElement('span'); q.className = 'tag p'; q.textContent = 'no está en IBAO'; tags.appendChild(q); }
-    const n2 = document.createElement('span'); n2.className = 'n'; n2.textContent = d.pas;
-    const x = document.createElement('button'); x.className = 'link'; x.textContent = 'Anular'; x.hidden = gone;
-    let arm = false, tmr; x.onclick = () => { if (!arm) { arm = true; x.textContent = '¿Seguro?'; x.classList.add('arm'); tmr = setTimeout(() => { arm = false; x.textContent = 'Anular'; x.classList.remove('arm'); }, 3000); } else { clearTimeout(tmr); anular(r.id); } };
-    const rr = document.createElement('span'); rr.className = 'r'; rr.textContent = d.ruta;
-    row.append(t, p, tags, n2, x, rr); L.appendChild(row);
+  renderWeek();
+}
+/* ---------- Mi semana: turnos de los últimos 7 días, buscador y detalle de cada registro (todo en este equipo) ---------- */
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const diaTxt = ymdS => { const [y, m, d] = String(ymdS).split('-').map(Number); const dt = new Date(y, m - 1, d); return DIAS[dt.getDay()] + ' ' + pad(d) + '/' + pad(m); };
+const vivo = r => r.estado === 'pend' || r.estado === 'ok';
+function histGroups() {
+  const c = revCtrl(), m = new Map();
+  RECS.filter(r => !c || r.doc.ctrl === c).forEach(r => {
+    let g = m.get(r.doc.tid);
+    if (!g) { g = { tid: r.doc.tid, dia: r.doc.dia, turno: r.doc.turno, trq: r.doc.trq, ts: r.doc.ts, recs: [] }; m.set(r.doc.tid, g); }
+    g.recs.push(r); if (r.doc.ts > g.ts) g.ts = r.doc.ts;
+  });
+  if (T && (!c || T.ctrl === c) && !m.has(T.id)) m.set(T.id, { tid: T.id, dia: T.fecha, turno: T.tipo, trq: T.trq, ts: T.ini, recs: [] });
+  return [...m.values()].sort((a, b) => b.ts - a.ts);
+}
+function addTag(box, txt, cls) { const q = document.createElement('span'); q.className = 'tag' + (cls ? ' ' + cls : ''); q.textContent = txt; box.appendChild(q); }
+function renderWeek() {
+  const L = $('week'); if (!L) return; L.innerHTML = '';
+  const gs = histGroups();
+  $('l-sub').textContent = gs.length ? gs.length + (gs.length === 1 ? ' turno' : ' turnos') + ' · últimos 7 días' : '';
+  if (!gs.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'Aún no hay turnos. Aquí verás tus turnos de la semana.'; L.appendChild(d); return; }
+  gs.forEach(g => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'grp';
+    const act = g.recs.filter(vivo).length, anul = g.recs.length - act;
+    const a = document.createElement('span'); a.className = 'g1'; a.textContent = diaTxt(g.dia) + ' · ' + (g.turno === 'DIA' ? 'Día' : 'Noche');
+    const s = document.createElement('span'); s.className = 'g2'; s.textContent = trqName(g.trq) + ' · ' + act + (act === 1 ? ' bus' : ' buses') + (anul ? ' · ' + anul + ' anulado' + (anul > 1 ? 's' : '') : '');
+    const tg = document.createElement('span'); tg.className = 'tags';
+    if (T && !T.fin && g.tid === T.id) addTag(tg, 'en curso', 'live');
+    if (g.recs.some(r => r.rev === 'no' && vivo(r))) addTag(tg, 'por revisar', 'p');
+    if (g.recs.some(r => r.estado === 'pend')) addTag(tg, 'sin enviar', 'p');
+    const ch = document.createElement('span'); ch.className = 'chev'; ch.textContent = '›'; ch.setAttribute('aria-hidden', 'true');
+    b.append(a, s, tg, ch); b.onclick = () => openHist(g.tid); L.appendChild(b);
   });
 }
+
+let H = { tid: null, id: null, from: 'main' };
+const hq = () => ({ p: $('h-placa').value.toUpperCase().replace(/[^A-Z0-9]/g, ''), r: norm($('h-ruta').value.trim()) });
+function openHist(tid) {
+  H.tid = tid; H.id = null; H.from = $('v-main').hidden ? 'start' : 'main';
+  $('v-main').hidden = true; $('v-start').hidden = true; $('v-hist').hidden = false;
+  $('h-placa').value = ''; $('h-ruta').value = ''; window.scrollTo(0, 0); renderHist();
+}
+$('h-back').onclick = () => {
+  if (H.id) { H.id = null; renderHist(); return; }
+  $('v-hist').hidden = true; revUrlsClear();
+  if (H.from === 'main' && T) { $('v-main').hidden = false; renderList(); recompute(); } else { $('v-start').hidden = false; updateRevUi(); }
+};
+function revUrlsClear() { histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = []; }
+let histUrls = [];
+$('h-placa').addEventListener('input', () => { const p = $('h-placa').selectionStart; $('h-placa').value = $('h-placa').value.toUpperCase().replace(/[^A-Z0-9]/g, ''); try { $('h-placa').setSelectionRange(p, p); } catch (e) {} renderHist(); });
+$('h-ruta').addEventListener('input', renderHist);
+$('h-clear').onclick = () => { $('h-placa').value = ''; $('h-ruta').value = ''; renderHist(); };
+function renderHist() {
+  if ($('v-hist').hidden) return;
+  revUrlsClear();
+  const g = histGroups().find(x => x.tid === H.tid);
+  const det = H.id ? RECS.find(r => r.id === H.id) : null;
+  if (H.id && !det) H.id = null;
+  $('h-listwrap').hidden = !!det; $('h-det').hidden = !det;
+  $('h-back').textContent = det ? '← Lista' : '← Volver';
+  if (!g) { $('h-title').textContent = 'Turno'; $('h-sub').textContent = ''; $('h-list').innerHTML = ''; return; }
+  $('h-title').textContent = diaTxt(g.dia) + ' · ' + (g.turno === 'DIA' ? 'Día' : 'Noche');
+  const act = g.recs.filter(vivo).length;
+  $('h-sub').textContent = trqName(g.trq) + ' · ' + act + (act === 1 ? ' bus' : ' buses');
+  if (det) { renderDet(det); return; }
+  const q = hq(), L = $('h-list'); L.innerHTML = '';
+  const all = g.recs.slice().sort((a, b) => b.doc.ts - a.doc.ts);
+  const rows = all.filter(r => (!q.p || String(r.doc.placa || r.lectura || '').includes(q.p)) && (!q.r || norm(r.doc.ruta).includes(q.r)));
+  const filtered = !!(q.p || q.r); $('h-clear').hidden = !filtered;
+  $('h-count').textContent = filtered ? rows.length + ' de ' + all.length + ' registros' : all.length + (all.length === 1 ? ' registro' : ' registros');
+  if (!rows.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = filtered ? 'Ningún registro coincide con la búsqueda.' : 'Este turno aún no tiene registros.'; L.appendChild(d); return; }
+  rows.forEach(r => L.appendChild(rowEl(r)));
+}
+function rowEl(r) {
+  const d = r.doc, gone = r.estado === 'anulado' || r.estado === 'anul', row = document.createElement('div'); row.className = 'row tap' + (gone ? ' gone' : '');
+  row.tabIndex = 0; row.setAttribute('role', 'button');
+  const t = document.createElement('span'); t.className = 't'; t.textContent = d.hora.slice(0, 5);
+  const p = document.createElement('span'); p.className = 'p'; p.textContent = d.placa || r.lectura || '·····';
+  const tags = document.createElement('span'); tags.className = 'tags';
+  addTag(tags, d.mov === 'Entrada' ? 'E' : 'S');
+  if (gone) addTag(tags, 'anulado');
+  else if (r.estado === 'pend') addTag(tags, 'sin enviar', 'p');
+  if (r.rev === 'no' && !gone) addTag(tags, 'por revisar', 'p');
+  if (d.nueva && !gone) addTag(tags, 'no está en IBAO', 'p');
+  const n2 = document.createElement('span'); n2.className = 'n'; n2.textContent = d.pas;
+  const rr = document.createElement('span'); rr.className = 'r'; rr.textContent = d.ruta;
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'link'; x.textContent = 'Anular';
+  x.hidden = gone || !(T && !T.fin && d.tid === T.id);   // solo se anula dentro del turno abierto
+  let arm = false, tmr; x.onclick = e => { e.stopPropagation(); if (!arm) { arm = true; x.textContent = '¿Seguro?'; x.classList.add('arm'); tmr = setTimeout(() => { arm = false; x.textContent = 'Anular'; x.classList.remove('arm'); }, 3000); } else { clearTimeout(tmr); anular(r.id); } };
+  row.append(t, p, tags, n2, x, rr);
+  const open = () => { H.id = r.id; renderHist(); window.scrollTo(0, 0); };
+  row.addEventListener('click', e => { if (!e.target.closest('button')) open(); });
+  row.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); open(); } });
+  return row;
+}
+function renderDet(r) {
+  const d = r.doc, B = $('h-det'); B.innerHTML = '';
+  const gone = r.estado === 'anulado' || r.estado === 'anul';
+  const ph = document.createElement('div'); ph.className = 'dphoto';
+  const blob = r.thumb || r.foto;
+  if (blob) { const im = document.createElement('img'); const u = URL.createObjectURL(blob); histUrls.push(u); im.src = u; im.alt = 'Foto del registro'; ph.appendChild(im); }
+  else { ph.className += ' noimg'; ph.textContent = 'Sin foto en este equipo'; }
+  B.appendChild(ph);
+  const dl = document.createElement('dl'); dl.className = 'kv';
+  const kv = (k, v, cls) => { if (v === undefined || v === null || v === '') return; const w = document.createElement('div'); const a = document.createElement('dt'); a.textContent = k; const b = document.createElement('dd'); b.textContent = v; if (cls) b.className = cls; w.append(a, b); dl.appendChild(w); };
+  kv('Placa', d.placa || (r.lectura ? r.lectura + ' (sin confirmar)' : 'Sin placa todavía'));
+  if (d.auto) {
+    if (r.lectura && r.lectura !== d.placa) kv('Lo que leyó el sistema', r.lectura);
+    kv('Revisión', r.rev === 'no' ? 'Por revisar' : (r.corr ? 'Corregida por ti' : 'Confirmada'), r.rev === 'no' ? 'warnt' : '');
+  }
+  kv('Fecha y hora', d.fecha.split('-').reverse().join('/') + ' ' + d.hora);
+  kv('Movimiento', d.mov); kv('Ruta', d.ruta); kv('Zona', d.zona); kv('Pasajeros', String(d.pas));
+  kv('Tranquera', trqName(d.trq)); kv('Controlador', d.ctrl); kv('Turno', d.turno === 'DIA' ? 'Día' : 'Noche');
+  if (d.ibao) kv('IBAO', d.ibao === 'Sí' ? 'Registrada' : d.ibao);
+  Object.keys(d.extras || {}).forEach(k => kv(k, String(d.extras[k])));
+  kv('Estado', gone ? 'Anulado' : (r.estado === 'pend' ? 'Sin enviar todavía' : 'Enviado'), r.estado === 'pend' ? 'warnt' : '');
+  kv('Código', '#' + String(r.id).slice(-6).toUpperCase());
+  B.appendChild(dl);
+  if (!gone && T && !T.fin && d.tid === T.id) {
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'btn'; x.textContent = 'Anular este registro';
+    let arm = false, tmr; x.onclick = () => { if (!arm) { arm = true; x.textContent = '¿Seguro? Toca otra vez para anular'; tmr = setTimeout(() => { arm = false; x.textContent = 'Anular este registro'; }, 3500); } else { clearTimeout(tmr); anular(r.id); H.id = null; renderHist(); } };
+    B.appendChild(x);
+  }
+}
+$('go-hist').onclick = () => { const g = histGroups()[0]; if (g) openHist(g.tid); };
+
 $('t-close').onclick = () => {
   const act = RECS.filter(r => r.doc.tid === T.id && (r.estado === 'pend' || r.estado === 'ok')).length, pend = RECS.filter(r => r.estado === 'pend' || r.estado === 'anul').length, rvn = revList().length;
   $('t-confirm-t').textContent = 'Vas a cerrar el turno con ' + act + ' buses.' + (rvn ? ' Te quedan ' + rvn + ' placas por revisar: las revisas desde «Revisar».' : '') + (pend ? ' Hay ' + pend + ' registros sin enviar: se enviarán solos cuando haya señal; no cierres la app hasta entonces.' : '');
@@ -596,14 +723,14 @@ let draftT = null;
 function scheduleDraft() { clearTimeout(draftT); draftT = setTimeout(saveDraft, 400); }
 async function saveDraft() {
   if (!T || T.fin || $('v-main').hidden) return;
-  const d = { tid: T.id, mov: S.mov, placa: S.placa, ruta: S.ruta, pas: px.value, extras: S.extras, foto: S.foto || null };
+  const d = { tid: T.id, mov: S.mov, placa: S.placa, ruta: S.ruta, pas: px.value, extras: S.extras, foto: S.foto || null, pid: S.pid };
   await metaPut('draft', (!d.foto && !d.placa && !d.ruta && !d.pas) ? null : d);
 }
 async function restoreDraft() {
   let d = null; try { d = await metaGet('draft'); } catch (e) {}
   if (!d || !T || T.fin || d.tid !== T.id) return;
   S.mov = d.mov || S.mov; setSeg('seg-mov', S.mov);
-  if (d.foto) { S.foto = d.foto; S.fotoUrl = URL.createObjectURL(d.foto); showPhoto(); }
+  if (d.foto) { S.foto = d.foto; S.pid = d.pid || ''; S.fotoUrl = URL.createObjectURL(d.foto); showPhoto(); }
   if (d.placa) { pl.value = d.placa; onPlate(d.placa, false); }
   if (d.ruta) { S.touched = true; setRuta(d.ruta); }
   if (d.pas) px.value = d.pas;
@@ -617,7 +744,7 @@ window.addEventListener('pagehide', () => { clearTimeout(draftT); saveDraft(); }
 /* ---------- arranque ---------- */
 (async function init() {
   try { RECS = (await idb.all('rec')) || []; } catch (e) { RECS = []; }
-  const limite = Date.now() - 3 * 864e5, viejo = r => (r.estado === 'ok' || r.estado === 'anulado') && r.doc.ts < limite && r.rev !== 'no' && r.rev !== 'conf';   // lo que falta revisar nunca se borra
+  const limite = Date.now() - 7 * 864e5, viejo = r => (r.estado === 'ok' || r.estado === 'anulado') && r.doc.ts < limite && r.rev !== 'no' && r.rev !== 'conf';   // lo que falta revisar nunca se borra
   for (const r of RECS.filter(viejo)) await recDel(r.id);
   RECS = RECS.filter(r => !viejo(r));
   try { TURNOS = (await metaGet('turnos')) || []; } catch (e) { TURNOS = []; }
