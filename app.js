@@ -460,10 +460,10 @@ $('rev-back').onclick = () => {
   updateRevUi();
 };
 $('rev-list').addEventListener('focusout', () => { setTimeout(() => { if (revDirty && !$('rev-list').contains(document.activeElement)) { revDirty = false; renderRev(); } }, 50); });
-function renderRev() {
+function renderRev(force) {
   if ($('v-rev').hidden) return;
   const box = $('rev-list');
-  if (box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { revDirty = true; return; }
+  if (!force && box.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { revDirty = true; return; }
   revUrls.forEach(u => URL.revokeObjectURL(u)); revUrls = []; box.innerHTML = '';
   const all = revList(); $('rev-sub').textContent = all.length ? all.length + ' por revisar' : '';
   $('rev-help').hidden = !all.length;
@@ -500,7 +500,7 @@ async function confirmRev(r, v) {
   const info = PL.get(v);
   r.rev = 'conf'; r.doc.placa = v; r.doc.ibao = ibaoOf(info); r.doc.nueva = !info;
   r.corr = v !== (r.lectura || ''); r.revAt = Date.now(); r.revBy = revCtrl() || r.doc.ctrl; delete r.edit;
-  await recPut(r); revDirty = false; renderRev(); setStatus(); setTimeout(sync, 100);
+  await recPut(r); revDirty = false; if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); renderRev(true); setStatus(); setTimeout(sync, 100);
 }
 
 /* ---------- toast, anular ---------- */
